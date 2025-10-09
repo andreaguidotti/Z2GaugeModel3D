@@ -1,3 +1,9 @@
+# macOS system files
+.DS_Store
+
+# VS Code settings
+.vscode/
+
 # Prerequisites
 *.d
 
@@ -22,7 +28,7 @@
 *.la
 *.lo
 
-# Shared objects (inc. Windows DLLs)
+# Shared objects
 *.dll
 *.so
 *.so.*
@@ -45,7 +51,7 @@
 # Kernel Module Compile Results
 *.mod*
 *.cmd
-.tmp_versions/
+*.tmp_versions/
 modules.order
 Module.symvers
 Mkfile.old
