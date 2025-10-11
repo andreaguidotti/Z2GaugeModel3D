@@ -7,32 +7,10 @@
 #include "../include/random.h"
 #include "../include/geometry.h"
 
-#define DEBUG 1
+int dim = 3;
 
-int DIM = 3;
-
-#if DEBUG
-int ****debugLattice = NULL;
-int cartcoord[3];
-#endif
-
-void init_lattice(int ***lattice, int size, int dim)
+void init_lattice(int ***lattice, int size)
 {
-#if DEBUG
-    debugLattice = malloc((unsigned int)size * sizeof(int ***));
-    for (int x = 0; x < size; x++)
-    {
-        debugLattice[x] = malloc((unsigned int)size * sizeof(int **));
-        for (int y = 0; y < size; y++)
-        {
-            debugLattice[x][y] = malloc((unsigned int)size * sizeof(int *));
-            for (int z = 0; z < size; z++)
-            {
-                debugLattice[x][y][z] = malloc((unsigned int)DIM * sizeof(int));
-            }
-        }
-    }
-#endif
     int link;
     long int volume = 1;
     for (int i = 0; i < dim; i++)
@@ -56,15 +34,11 @@ void init_lattice(int ***lattice, int size, int dim)
         for (int ii = 0; ii < dim; ii++)
         {
             link = 2 * (int)(2 * myrand()) - 1;
-        #if DEBUG
-            lex_to_cart(i, cartcoord, dim, size);
-            debugLattice[cartcoord[0]][cartcoord[1]][cartcoord[2]][ii] = link;
-        #endif
             (*lattice)[i][ii] = link;
         }
     }
 }
-void init_neighbours(long int **nnp, long int **nnm, int size, int dim)
+void init_neighbours(long int **nnp, long int **nnm, int size)
 {
     long int volume = 1;
     for (int i = 0; i < dim; i++)
@@ -85,75 +59,101 @@ void init_neighbours(long int **nnp, long int **nnm, int size, int dim)
     }
     init_geo(*nnp, *nnm, size, dim);
 }
-#if DEBUG
-void check_lattice(int **Lattice, int ****debugLattice, int size, int dim)
+
+/* Computes the sum of staples around selected link:
+ *  For the link at site 'lex' in direction 'dir' returns the sum of all
+ *  plaquettes(\that selected link) containing that link.
+ */
+
+int computeStaples(int **restrict Lattice,
+                   long int const *restrict nnp,
+                   long int const *restrict nnm,
+                   long int lex,
+                   int dir,
+                   long int volume)
 {
-    long int volume = 1;
-    int linkLattice;
-    int linkDebug;
-    for (int i = 0; i < dim; i++)
-    {
-        volume *= size;
-    }
-    for (long int lex = 0; lex < volume; lex++)
-    {
-        for (int dir = 0; dir < dim; dir++)
-        {
-            lex_to_cart(lex, cartcoord, dim, size);
+    int linkProd, sumStaples = 0,
+                  lex_minus_orth, lex_plus_dir,
+                  lex_plus_orth;
 
-            linkLattice = Lattice[lex][dir];
-            linkDebug = debugLattice[cartcoord[0]][cartcoord[1]][cartcoord[2]][dir];
+    /*                      ^ dir
+     *                      |
+     *                 lex_plus_dir
+     *             +--------+--------+
+     *             |        |        |
+     *             |        |        |
+     *             |        |        |    orth
+     *          ---+--------+--------+--->
+     *   lex_minus_orth    lex      lex_plus_orth
+     *                      |
+     */
 
-            if (linkLattice != linkDebug)
-            {
-                printf("mismatch between Lattice and debugLattice");
-                exit(EXIT_FAILURE);
-            }
-        }
+    lex_plus_dir = nnp[dirgeo(lex, dir, volume)];
+
+    for (int orth = 0; orth < dim; orth++)
+    {
+        if (orth == dir)
+            continue;
+
+        lex_plus_orth = nnp[dirgeo(lex, orth, volume)];
+
+        // ---------- forward staple ----------
+        linkProd = Lattice[lex][orth];
+        linkProd *= Lattice[lex_plus_dir][orth];
+        linkProd *= Lattice[lex_plus_orth][dir];
+
+        sumStaples += linkProd;
+
+        // ---------- backward staple ----------
+        lex_minus_orth = nnm[dirgeo(lex, orth, volume)];
+
+        linkProd = Lattice[lex_minus_orth][dir];
+        linkProd *= Lattice[lex_minus_orth][orth];
+        linkProd *= Lattice[nnp[dirgeo(lex_minus_orth, dir, volume)]][orth];
+
+        sumStaples += linkProd;
     }
-    printf("Check Lattice passed\n");
+    return sumStaples;
 }
 
-void check_neighbours(long int *nnp, long int *nnm, int size, int dim)
+void init_lookupTable(double ** expTable, double beta)
 {
-    int cartCheck[3];
+    int deltaSmax = 4 * (dim - 1);
+    int range = 2 * deltaSmax + 1;
 
-    long int forward;
-    long int backward;
-
-    long int volume = 1;
-
-    for (int i = 0; i < dim; i++)
+    *expTable = (double*)malloc((unsigned int)range*sizeof(double));
+    for (int deltaS = - deltaSmax; deltaS <= deltaSmax; deltaS += 4)
     {
-        volume *= size;
+        (*expTable)[deltaS + deltaSmax] = exp(beta*deltaS);
     }
-    for (long int lex = 0; lex < volume; lex++)
-    {
-        for (int dir = 0; dir < dim; dir++)
-        {
-            lex_to_cart(lex, cartCheck, dim, size);
-
-            cartCheck[dir] = (cartCheck[dir] + 1) % size;
-            cart_to_lex(&forward, cartCheck, dim, size);
-
-            if (nnp[dirgeo(lex, dir, volume)] != forward)
-            {
-                printf("Mismatch nnp \n");
-                exit(EXIT_FAILURE);
-            }
-            cartCheck[dir] = (cartCheck[dir] - 2 + size) % size; 
-            cart_to_lex(&backward, cartCheck, dim, size);
-
-            if (nnm[dirgeo(lex, dir, volume)] != backward)
-            {
-                printf("Mismatch nnm \n");
-                exit(EXIT_FAILURE);
-            }
-        }
-    }
-    printf("Check neighbours passed\n");
 }
-#endif
+
+int metropolis(int **restrict Lattice,
+               long int const *restrict nnp,
+               long int const *restrict nnm,
+               double * expTable,
+               int lex, int dir,   
+               long int volume,
+               double beta)
+{
+    int deltaS, deltaSmax, sumStaples;
+
+    deltaSmax = 2*(dim-1);
+    sumStaples = computeStaples(Lattice, nnp, nnm, lex, dir, volume);
+
+    deltaS = -2 * Lattice[lex][dir] * sumStaples;
+    if (deltaS > 0)
+    {
+        Lattice[lex][dir] *= -1;
+        return 1;
+    }
+    else if (myrand() < expTable[deltaS + deltaSmax])
+    {
+        Lattice[lex][dir] *= -1;
+        return 1;
+    }
+    return 0;
+}
 int main()
 {
     const unsigned long int seed1 = (unsigned long int)time(NULL);
@@ -163,16 +163,4 @@ int main()
 
     int **Lattice;
     long int *nnp, *nnm;
-
-#if DEBUG
-
-    int size = 5;
-
-    init_lattice(&Lattice,size,DIM);
-    init_neighbours(&nnp,&nnm,size,DIM);
-
-    check_lattice(Lattice,debugLattice,size,DIM);
-    check_neighbours(nnp,nnm,size,DIM);
-
-#endif
 }
