@@ -9,6 +9,15 @@
 
 int dim = 3;
 
+/* Initialize the lattice configuration.
+
+   Allocates memory for a 'dim'-dimensional lattice of linear size 'size'.
+   Each site contains 'dim' links initialized randomly to ±1.
+
+   The resulting lattice is stored in a dynamically allocated array:
+     lattice[lex][dir], where 'lex' is the lexicographic site index and
+     'dir' labels the direction.
+*/
 void init_lattice(int ***lattice, int size)
 {
     int link;
@@ -38,6 +47,14 @@ void init_lattice(int ***lattice, int size)
         }
     }
 }
+/* Initialize nearest-neighbour lookup tables.
+
+   Allocates and fills the arrays 'nnp' and 'nnm', which store the forward
+   and backward nearest-neighbour indices for each lattice site.
+
+   These tables are used to navigate the lattice efficiently in lexicographic
+   representation.
+*/
 void init_neighbours(long int **nnp, long int **nnm, int size)
 {
     long int volume = 1;
@@ -60,32 +77,48 @@ void init_neighbours(long int **nnp, long int **nnm, int size)
     init_geo(*nnp, *nnm, size, dim);
 }
 
-/* Computes the sum of staples around selected link:
- *  For the link at site 'lex' in direction 'dir' returns the sum of all
- *  plaquettes(\that selected link) containing that link.
- */
+/* Initialize the exponential lookup table.
 
-int computeStaples(int **restrict Lattice,
-                   long int const *restrict nnp,
-                   long int const *restrict nnm,
-                   long int lex,
-                   int dir,
+   Precomputes exp(beta * deltaS) for all possible energy variations 'deltaS'
+   in the Metropolis update, and stores them in 'expTable' for faster access.
+
+   The table indices are shifted by 'deltaSmax' to allow negative deltas.
+*/
+void init_expTable(double ** expTable, double beta)
+{
+    int deltaSmax = 4 * (dim - 1);
+    int range = 2 * deltaSmax + 1;
+
+    *expTable = (double*)malloc((unsigned int)range*sizeof(double));
+    for (int deltaS = - deltaSmax; deltaS <= deltaSmax; deltaS += 4)
+    {
+        (*expTable)[deltaS + deltaSmax] = exp(beta*deltaS);
+    }
+}
+
+/* Compute the sum of staples around a selected link.
+
+   For the link at site 'lex' in direction 'dir' this function returns the sum
+   of all staples of that link, i.e each staple contributes a product of three 
+   neighbouring links forming the sides of the plaquette.
+*/
+int computeStaples(int **restrict Lattice, long int const *restrict nnp,
+                   long int const *restrict nnm, long int lex, int dir,
                    long int volume)
 {
-    int linkProd, sumStaples = 0,
-                  lex_minus_orth, lex_plus_dir,
-                  lex_plus_orth;
+    int linkProd, sumStaples = 0;
+    long int lex_minus_orth, lex_plus_dir, lex_plus_orth;
 
     /*                      ^ dir
-     *                      |
-     *                 lex_plus_dir
-     *             +--------+--------+
-     *             |        |        |
-     *             |        |        |
-     *             |        |        |    orth
-     *          ---+--------+--------+--->
-     *   lex_minus_orth    lex      lex_plus_orth
-     *                      |
+                            |
+                       lex_plus_dir
+                   +--------+--------+
+                   |        |        |
+                   |        |        |
+                   |        |        |    orth
+                ---+--------+--------+--->
+         lex_minus_orth    lex      lex_plus_orth
+                            |
      */
 
     lex_plus_dir = nnp[dirgeo(lex, dir, volume)];
@@ -116,25 +149,16 @@ int computeStaples(int **restrict Lattice,
     return sumStaples;
 }
 
-void init_lookupTable(double ** expTable, double beta)
-{
-    int deltaSmax = 4 * (dim - 1);
-    int range = 2 * deltaSmax + 1;
+/* Perform a single Metropolis update for a link variable.
 
-    *expTable = (double*)malloc((unsigned int)range*sizeof(double));
-    for (int deltaS = - deltaSmax; deltaS <= deltaSmax; deltaS += 4)
-    {
-        (*expTable)[deltaS + deltaSmax] = exp(beta*deltaS);
-    }
-}
+   Attempts to flip the link Lattice[lex][dir] with probability min(1, exp(ΔS)),
+   where ΔS is the local change in action computed from the surrounding staples.
 
-int metropolis(int **restrict Lattice,
-               long int const *restrict nnp,
-               long int const *restrict nnm,
-               double * expTable,
-               int lex, int dir,   
-               long int volume,
-               double beta)
+   Returns 1 if the link is flipped, 0 otherwise.
+*/
+int metropolis(int **restrict Lattice, long int const *restrict nnp,
+               long int const *restrict nnm, double * expTable,
+               int lex, int dir,long int volume, double beta)
 {
     int deltaS, deltaSmax, sumStaples;
 
