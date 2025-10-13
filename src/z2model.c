@@ -6,7 +6,9 @@
 
 #include "../include/random.h"
 #include "../include/geometry.h"
+#include "../include/debug.h"
 
+#define DEBUG 1
 int dim = 3;
 
 /* Initialize the lattice configuration.
@@ -47,6 +49,7 @@ void init_lattice(int ***lattice, int size)
         }
     }
 }
+
 /* Initialize nearest-neighbour lookup tables.
 
    Allocates and fills the arrays 'nnp' and 'nnm', which store the forward
@@ -84,22 +87,22 @@ void init_neighbours(long int **nnp, long int **nnm, int size)
 
    The table indices are shifted by 'deltaSmax' to allow negative deltas.
 */
-void init_expTable(double ** expTable, double beta)
+void init_expTable(double **expTable, double beta)
 {
     int deltaSmax = 4 * (dim - 1);
     int range = 2 * deltaSmax + 1;
 
-    *expTable = (double*)malloc((unsigned int)range*sizeof(double));
-    for (int deltaS = - deltaSmax; deltaS <= deltaSmax; deltaS += 4)
+    *expTable = (double *)malloc((unsigned int)range * sizeof(double));
+    for (int deltaS = -deltaSmax; deltaS <= deltaSmax; deltaS += 4)
     {
-        (*expTable)[deltaS + deltaSmax] = exp(beta*deltaS);
+        (*expTable)[deltaS + deltaSmax] = exp(beta * deltaS);
     }
 }
 
 /* Compute the sum of staples around a selected link.
 
    For the link at site 'lex' in direction 'dir' this function returns the sum
-   of all staples of that link, i.e each staple contributes a product of three 
+   of all staples of that link, i.e each staple contributes a product of three
    neighbouring links forming the sides of the plaquette.
 */
 int computeStaples(int **restrict Lattice, long int const *restrict nnp,
@@ -157,12 +160,12 @@ int computeStaples(int **restrict Lattice, long int const *restrict nnp,
    Returns 1 if the link is flipped, 0 otherwise.
 */
 int metropolis(int **restrict Lattice, long int const *restrict nnp,
-               long int const *restrict nnm, double * expTable,
-               int lex, int dir,long int volume, double beta)
+               long int const *restrict nnm, double *expTable,
+               int lex, int dir, long int volume)
 {
     int deltaS, deltaSmax, sumStaples;
 
-    deltaSmax = 2*(dim-1);
+    deltaSmax = 4 * (dim - 1);
     sumStaples = computeStaples(Lattice, nnp, nnm, lex, dir, volume);
 
     deltaS = -2 * Lattice[lex][dir] * sumStaples;
@@ -178,6 +181,7 @@ int metropolis(int **restrict Lattice, long int const *restrict nnp,
     }
     return 0;
 }
+
 int main()
 {
     const unsigned long int seed1 = (unsigned long int)time(NULL);
@@ -187,4 +191,29 @@ int main()
 
     int **Lattice;
     long int *nnp, *nnm;
+    double *expTable;
+
+    double beta = 0.5;
+    int size = 3;
+
+    long int volume = 1;
+    for (int i = 0; i < dim; i++)
+    {
+        volume *= size;
+    }
+
+    init_expTable(&expTable, beta);
+    init_lattice(&Lattice, size);
+    init_neighbours(&nnp, &nnm, size);
+
+#if DEBUG
+    printf("DEBUG:");
+    printf("\n\n");
+    check_expTable(expTable, beta, dim);
+    printf("\n");
+    check_neighbours(nnp,nnm,size,dim);
+    printf("\n");
+    check_staple(Lattice, nnp, nnm, dim, volume);
+    printf("\n\n");
+#endif
 }
