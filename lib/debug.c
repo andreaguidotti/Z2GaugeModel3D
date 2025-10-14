@@ -8,7 +8,7 @@
 #include "../include/random.h"
 #include "../include/debug.h"
 
-extern int computeStaples(int **Lattice, long int const *nnp,
+extern int computeStaple(int **Lattice, long int const *nnp,
                           long int const *nnm, long int lex, int dir,
                           long int volume);
 
@@ -17,12 +17,14 @@ extern int computeStaples(int **Lattice, long int const *nnp,
    Flips each link to identify which staples should change,
    then verifies computeStaples() returns the correct values.
 */
-void check_staple(int **restrict Lattice, long int const *restrict nnp,
-                  long int const *restrict nnm, int dim, long int volume)
+void check_staple(int **restrict Lattice, 
+                  long int const * const restrict nnp,
+                  long int const * const restrict nnm, 
+                  int dim, long int volume)
 {
-    printf("Running staple consistency check:\n");
+    printf("Running staple consistency test:\n");
 
-    long int lex_plus_orth, lex_plus_dir, lex_minus_orth, errorCounter;
+    long int lex_plus_orth, lex_plus_dir, lex_minus_orth;
 
     int **changed = (int **)malloc((unsigned int)volume * sizeof(int *));
     int **expected = (int **)malloc((unsigned int)volume * sizeof(int *));
@@ -40,10 +42,9 @@ void check_staple(int **restrict Lattice, long int const *restrict nnp,
     // Compute staples before any flips
     for (long int site = 0; site < volume; site++)
         for (int d = 0; d < dim; d++)
-            beforeStaple[site][d] = computeStaples(Lattice, nnp, nnm, site, d, volume);
+            beforeStaple[site][d] = computeStaple(Lattice, nnp, nnm, site, d, volume);
 
     // Loop over all sites and directions to flip each link
-    errorCounter = 0;
     for (long int lex = 0; lex < volume; lex++)
     {
         for (int dir = 0; dir < dim; dir++)
@@ -54,7 +55,7 @@ void check_staple(int **restrict Lattice, long int const *restrict nnp,
             // Recompute staples after the flip
             for (long int site = 0; site < volume; site++)
                 for (int d = 0; d < dim; d++)
-                    afterStaple[site][d] = computeStaples(Lattice, nnp, nnm, site, d, volume);
+                    afterStaple[site][d] = computeStaple(Lattice, nnp, nnm, site, d, volume);
 
             // Determine which staples are expected to change
             lex_plus_dir = nnp[dirgeo(lex, dir, volume)];
@@ -81,9 +82,21 @@ void check_staple(int **restrict Lattice, long int const *restrict nnp,
                         changed[site][d] = 1;
                     if (expected[site][d] != changed[site][d])
                     {
-                        errorCounter += 1;
                         printf("Mismatch at site %ld, dir %d (expected %d, got %d)\n",
                                site, d, expected[site][d], changed[site][d]);
+
+                        for (long int i = 0; i < volume; i++)
+                        {
+                            free(expected[i]);
+                            free(beforeStaple[i]);
+                            free(afterStaple[i]);
+                            free(changed[i]);
+                        }
+                        free(expected);
+                        free(beforeStaple);
+                        free(afterStaple);
+                        free(changed);
+
                         exit(EXIT_FAILURE);
                     }
                 }
@@ -99,11 +112,6 @@ void check_staple(int **restrict Lattice, long int const *restrict nnp,
             Lattice[lex][dir] *= -1;
         }
     }
-    if (errorCounter == 0)
-    {
-        printf("ComputeStaples test passed");
-    }
-
     // Free all dynamically allocated memory
     for (long int i = 0; i < volume; i++)
     {
@@ -141,7 +149,6 @@ void check_expTable(double const *expTable, double beta, int dim)
             exit(EXIT_FAILURE);
         }
     }
-    printf("expTable test passed\n");
 }
 
 /* Check nearest-neighbor tables.
@@ -150,7 +157,9 @@ void check_expTable(double const *expTable, double beta, int dim)
    correctly map lattice sites in all directions by converting between
    lexicographic and Cartesian coordinates.
 */
-void check_neighbours(long int *nnp, long int *nnm, int size, int dim)
+void check_neighbours(long int const * const restrict nnp, 
+                      long int const * const restrict nnm, 
+                      int size, int dim)
 {
     printf("Running nnp-nnm consistency check:\n");
     int cartCheck[3];
@@ -188,5 +197,22 @@ void check_neighbours(long int *nnp, long int *nnm, int size, int dim)
             }
         }
     }
-    printf("Check neighbours passed\n");
+}
+
+void debugTests(int **restrict Lattice, 
+                long int const * const restrict nnp,
+                long int const * const restrict nnm, 
+                int dim, long int volume, double beta, 
+                double *expTable, int size)
+{
+    printf("\n");
+    printf("DEBUG:\n");
+    printf("\n");
+    check_staple(Lattice, nnp, nnm, dim, volume);
+   
+    check_expTable(expTable, beta, dim);
+  
+    check_neighbours(nnp, nnm, size, dim);
+    printf("\n");
+    printf("All tests passed !\n");
 }
