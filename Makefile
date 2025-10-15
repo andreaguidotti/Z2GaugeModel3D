@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-O3 -Wall -Wextra   -Wconversion 
 
-binaries= z2model
+binaries= z2model obs
 all: $(binaries)
 
 random.o: lib/random.c  include/random.h
@@ -13,6 +13,9 @@ debug.o: lib/debug.c  include/debug.h include/random.h include/geometry.h
 z2model: src/z2model.c random.o geometry.o debug.o
 	$(CC) $(CFLAGS) -c src/z2model.c
 	$(CC) $(CFLAGS) z2model.o random.o geometry.o debug.o -o $@ -lm
+obs: src/observables.c 
+	$(CC) $(CFLAGS) -c src/observables.c
+	$(CC) $(CFLAGS) observables.o -o $@ -lm	
 
 .PHONY: clean
 clean:
