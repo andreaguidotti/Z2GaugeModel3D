@@ -299,7 +299,7 @@ int main(int argc, char **argv)
 
     const unsigned long int seed1 = (unsigned long int)time(NULL);
     const unsigned long int seed2 = seed1 + 127;
-    const int measevery = 20;
+    const int measevery = 200;
 
     if (argc != 6)
     {
@@ -396,11 +396,13 @@ int main(int argc, char **argv)
         {
             for (int Ws = 1; Ws <= size / 4; Ws++)
             {
+                //fprintf(fp, "%d ",Ws);
                 for (int Wt = 1; Wt <= MIN(size / 4, 8); Wt++)
                 {
                     loop = WilsonLoop(Lattice, nnp, nnm, volume, Wt, Ws);
-                    fprintf(fp, "%.12f  ", loop);
+                    fprintf(fp, "%.12f ", loop);
                 }
+                //fprintf(fp, "\n");
             }
             fprintf(fp, "\n");
         }
