@@ -79,7 +79,7 @@ void sumKahan(double addend, double *sumtot, double *correction)
 void extractData(FILE *fp, data *W, long int sampleEff, long pos,
                  int target_col, int Wt_counter, int Ws_counter)
 {
-    char buffer[1024];
+    char buffer[4000];
     double value;
 
     int read;
@@ -311,7 +311,7 @@ int main(int argc, char **argv)
 
     // Discard thermalization
 
-    char buffer[1024];
+    char buffer[4000];
     for (long int i = 0; i < therm; i++)
     {
         fgets(buffer, sizeof(buffer), fp);
@@ -323,8 +323,8 @@ int main(int argc, char **argv)
 
     // Determine lattice loop parameters
 
-    int Wt_max = MIN(size / 4, 8), Wt_counter = 1, Ws_counter = 1;
-    int ncolumns = MIN(size / 4, 8) * size / 4;
+    int Wt_max = MIN(size/4, 8), Wt_counter = 1, Ws_counter = 1;
+    int ncolumns = MIN(size / 4, 8) * (size / 4);
 
     // Loop over each Wilson loop column
 
