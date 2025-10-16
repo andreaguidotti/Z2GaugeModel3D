@@ -11,6 +11,8 @@
 #define DEBUG 0
 
 #define dim 3
+#define epsilon 0.05
+
 #define STRING_LENGTH 50
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -167,7 +169,7 @@ double sweepMetro(int **restrict Lattice,
                   long int const *const restrict nnm,
                   long int volume)
 {
-    long int updateCounter = 0;
+    long int updateCounter = 0, trialCounter = 0;
     int deltaS, deltaSmax, sumStaples, maxStaple;
 
     // max possible value returned by computeStaple (all link = 1)
@@ -181,29 +183,36 @@ double sweepMetro(int **restrict Lattice,
         // update in all possible direction for each site
         for (int dir = 0; dir < dim; dir++)
         {
-            // compute action variation associated with proposed trial update
-            sumStaples = computeStaple(Lattice, nnp, nnm, lex, dir, volume);
-            deltaS = -2 * Lattice[lex][dir] * sumStaples;
-            // to avoid out of range index in expTable
-            if (deltaS < -deltaSmax || deltaS > deltaSmax)
+            if (myrand() < epsilon)
             {
-                fprintf(stderr, "Warning: out of range index(lex=%ld, dir=%d)\n",
-                        lex, dir);
                 continue;
             }
-            if (deltaS > 0)
-            {
-                Lattice[lex][dir] *= -1;
-                updateCounter += 1;
-            }
-            else if (myrand() < expTable[deltaS + deltaSmax])
-            {
-                Lattice[lex][dir] *= -1;
-                updateCounter += 1;
+            else
+            {   trialCounter+=1;
+                // compute action variation associated with proposed trial update
+                sumStaples = computeStaple(Lattice, nnp, nnm, lex, dir, volume);
+                deltaS = -2 * Lattice[lex][dir] * sumStaples;
+                // to avoid out of range index in expTable
+                if (deltaS < -deltaSmax || deltaS > deltaSmax)
+                {
+                    fprintf(stderr, "Warning: out of range index(lex=%ld, dir=%d)\n",
+                            lex, dir);
+                    continue;
+                }
+                if (deltaS > 0)
+                {
+                    Lattice[lex][dir] *= -1;
+                    updateCounter += 1;
+                }
+                else if (myrand() < expTable[deltaS + deltaSmax])
+                {
+                    Lattice[lex][dir] *= -1;
+                    updateCounter += 1;
+                }
             }
         }
     }
-    return (double)updateCounter / (double)(volume * dim);
+    return (double)updateCounter / (double)(trialCounter);
 }
 
 /* Compute the Wilson loop W(Wt, Ws).
@@ -396,13 +405,13 @@ int main(int argc, char **argv)
         {
             for (int Ws = 1; Ws <= size / 4; Ws++)
             {
-                //fprintf(fp, "%d ",Ws);
+                // fprintf(fp, "%d ",Ws);
                 for (int Wt = 1; Wt <= MIN(size / 4, 8); Wt++)
                 {
                     loop = WilsonLoop(Lattice, nnp, nnm, volume, Wt, Ws);
                     fprintf(fp, "%.12f ", loop);
                 }
-                //fprintf(fp, "\n");
+                // fprintf(fp, "\n");
             }
             fprintf(fp, "\n");
         }
