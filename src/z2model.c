@@ -304,23 +304,23 @@ int main(int argc, char **argv)
     double *expTable;
     char datafile[STRING_LENGTH];
 
-    int size;
+    int size, measevery;
     long int sample, therm;
     double beta, loop, accRate = 0.;
 
     const unsigned long int seed1 = (unsigned long int)time(NULL);
     const unsigned long int seed2 = seed1 + 127;
-    const int measevery = 200;
 
-    if (argc != 6)
+    if (argc != 7)
     {
         fprintf(stdout, "How to use this program:\n");
-        fprintf(stdout, "  %s size beta sample therm datafile\n\n", argv[0]);
+        fprintf(stdout, "  %s size beta sample therm measevery datafile\n\n", argv[0]);
         fprintf(stdout, "  size = temporal and spatial size of the lattice\n");
         fprintf(stdout, "  (space-time dimension defined by macro dim)\n");
         fprintf(stdout, "  beta = coupling\n");
         fprintf(stdout, "  sample = number of drawn to be extracted\n");
         fprintf(stdout, "  therm = number of thermalization sweeps\n");
+        fprintf(stdout, "  measevery = MC sweep updates between consecutive measurements\n");
         fprintf(stdout, "  datafile = name of the file on which to write the data\n\n");
         fprintf(stdout, "Compiled for:\n");
         fprintf(stdout, "  dimensionality = %d\n\n", dim);
@@ -339,15 +339,16 @@ int main(int argc, char **argv)
         beta = atof(argv[2]);
         sample = atol(argv[3]);
         therm = atol(argv[4]);
+        measevery = atoi(argv[5]);
 
-        if (strlen(argv[5]) >= STRING_LENGTH)
+        if (strlen(argv[6]) >= STRING_LENGTH)
         {
             fprintf(stderr, "File name too long. Increse STRING_LENGTH or shorten the name (%s, %d)\n", __FILE__, __LINE__);
             return EXIT_FAILURE;
         }
         else
         {
-            strcpy(datafile, argv[5]);
+            strcpy(datafile, argv[6]);
         }
         if (sample <= 0)
         {
