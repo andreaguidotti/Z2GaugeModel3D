@@ -194,33 +194,35 @@ void jackknife(obs *Potential, data *W,
 
         accumulate(Potential, valuePotential);
     }
-    if (nblocks_valid < nblocks / (3))
-    {
-        fprintf(stderr,
-                "Warning: too few valid blocks (%ld/%ld) for Wilson loop "
-                "(Wt=%d, Ws=%d) — skipping this observable\n",
-                nblocks_valid, nblocks, W->Wt, W->Ws);
+    // avoid unreliable jackknife analysis with too few valid blocks 
+    if (nblocks_valid < nblocks / 3)
+        if (nblocks_valid < nblocks / (3))
+        {
+            fprintf(stderr,
+                    "Warning: too few valid blocks (%ld/%ld) for Wilson loop "
+                    "(Wt=%d, Ws=%d) — skipping this observable\n",
+                    nblocks_valid, nblocks, W->Wt, W->Ws);
 
-        Potential->avg = NAN;
-        Potential->std = NAN;
-        return;
-    }
-    else
-    {
-        // Add the Kahan residual from the last addition
+            Potential->avg = NAN;
+            Potential->std = NAN;
+            return;
+        }
+        else
+        {
+            // Add the Kahan residual from the last addition
 
-        Potential->jackavg += Potential->kahanCorrection[0];
-        Potential->jackavgSqrd += Potential->kahanCorrection[1];
+            Potential->jackavg += Potential->kahanCorrection[0];
+            Potential->jackavgSqrd += Potential->kahanCorrection[1];
 
-        // Normalization
+            // Normalization
 
-        Potential->jackavg /= nblocks_valid;
-        Potential->jackavgSqrd /= nblocks_valid;
+            Potential->jackavg /= nblocks_valid;
+            Potential->jackavgSqrd /= nblocks_valid;
 
-        // Standard deviation
+            // Standard deviation
 
-        Potential->std = sqrt((nblocks_valid - 1) * (Potential->jackavgSqrd - pow(Potential->jackavg, 2)));
-    }
+            Potential->std = sqrt((nblocks_valid - 1) * (Potential->jackavgSqrd - pow(Potential->jackavg, 2)));
+        }
 }
 int main(int argc, char **argv)
 {
@@ -323,7 +325,7 @@ int main(int argc, char **argv)
 
     // Determine lattice loop parameters
 
-    int Wt_max = MIN(size/4, 8), Wt_counter = 1, Ws_counter = 1;
+    int Wt_max = MIN(size / 4, 8), Wt_counter = 1, Ws_counter = 1;
     int ncolumns = MIN(size / 4, 8) * (size / 4);
 
     // Loop over each Wilson loop column

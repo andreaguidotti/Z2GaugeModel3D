@@ -183,11 +183,13 @@ double sweepMetro(int **restrict Lattice,
         // update in all possible direction for each site
         for (int dir = 0; dir < dim; dir++)
         {
+            // probabilistic skip to enforce aperiodicity
             if (myrand() < epsilon)
             {
                 continue;
             }
             else
+                // count total attempted link updates
             {   trialCounter+=1;
                 // compute action variation associated with proposed trial update
                 sumStaples = computeStaple(Lattice, nnp, nnm, lex, dir, volume);
