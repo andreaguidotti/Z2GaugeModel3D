@@ -79,7 +79,7 @@ void sumKahan(double addend, double *sumtot, double *correction)
 void extractData(FILE *fp, data *W, long int sampleEff, long pos,
                  int target_col, int Wt_counter, int Ws_counter)
 {
-    char buffer[1024];
+    char buffer[4000];
     double value;
 
     int read;
@@ -89,7 +89,8 @@ void extractData(FILE *fp, data *W, long int sampleEff, long pos,
         if (fgets(buffer, sizeof(buffer), fp) == NULL)
         {
             fprintf(stderr, "Error: unexpected end of file"
-                            "or read error at row %d\n", row);
+                            "or read error at row %d\n",
+                    row);
             free(W->arr);
             fclose(fp);
             exit(EXIT_FAILURE);
@@ -171,6 +172,7 @@ void jackknife(obs *Potential, data *W,
                long int nblocks, long int blockdim)
 {
     double valuePotential;
+    long int nblocks_valid = 0;
 
     for (long int i = 0; i < nblocks; i++)
     {
@@ -178,15 +180,13 @@ void jackknife(obs *Potential, data *W,
 
         if (W->aux <= 0)
         {
-            fprintf(stderr,
-                    "Error:negative log argument, "
-                    "larger statistics needed for "
-                    "Wt-%d Ws-%d Wilson loop",
-                    W->Wt, W->Ws);
-
-            free(W->arr);
-            exit(EXIT_FAILURE);
+            fprintf(stderr, "Skipping block %ld for Wilson loop "
+                            "(Wt=%d, Ws=%d) due to non-positive "
+                            "mean value\n",
+                    i, W->Wt, W->Ws);
+            continue;
         }
+        nblocks_valid += 1;
 
         // mean and mean squared of jacksamples
 
@@ -194,20 +194,35 @@ void jackknife(obs *Potential, data *W,
 
         accumulate(Potential, valuePotential);
     }
+    // avoid unreliable jackknife analysis with too few valid blocks 
+    if (nblocks_valid < nblocks / 3)
+        if (nblocks_valid < nblocks / (3))
+        {
+            fprintf(stderr,
+                    "Warning: too few valid blocks (%ld/%ld) for Wilson loop "
+                    "(Wt=%d, Ws=%d) — skipping this observable\n",
+                    nblocks_valid, nblocks, W->Wt, W->Ws);
 
-    // Add the Kahan residual from the last addition
+            Potential->avg = NAN;
+            Potential->std = NAN;
+            return;
+        }
+        else
+        {
+            // Add the Kahan residual from the last addition
 
-    Potential->jackavg += Potential->kahanCorrection[0];
-    Potential->jackavgSqrd += Potential->kahanCorrection[1];
+            Potential->jackavg += Potential->kahanCorrection[0];
+            Potential->jackavgSqrd += Potential->kahanCorrection[1];
 
-    // Normalization
+            // Normalization
 
-    Potential->jackavg /= nblocks;
-    Potential->jackavgSqrd /= nblocks;
+            Potential->jackavg /= nblocks_valid;
+            Potential->jackavgSqrd /= nblocks_valid;
 
-    // Standard deviation
+            // Standard deviation
 
-    Potential->std = sqrt((nblocks - 1) * (Potential->jackavgSqrd - pow(Potential->jackavg, 2)));
+            Potential->std = sqrt((nblocks_valid - 1) * (Potential->jackavgSqrd - pow(Potential->jackavg, 2)));
+        }
 }
 int main(int argc, char **argv)
 {
@@ -298,7 +313,7 @@ int main(int argc, char **argv)
 
     // Discard thermalization
 
-    char buffer[1024];
+    char buffer[4000];
     for (long int i = 0; i < therm; i++)
     {
         fgets(buffer, sizeof(buffer), fp);
@@ -311,7 +326,7 @@ int main(int argc, char **argv)
     // Determine lattice loop parameters
 
     int Wt_max = MIN(size / 4, 8), Wt_counter = 1, Ws_counter = 1;
-    int ncolumns = MIN(size / 4, 8) * size / 4;
+    int ncolumns = MIN(size / 4, 8) * (size / 4);
 
     // Loop over each Wilson loop column
 
@@ -327,24 +342,22 @@ int main(int argc, char **argv)
         if (W.totSum / (double)sampleEff <= 0)
         {
             fprintf(stderr,
-                    "Error: negative log argument, "
-                    "larger statistics needed for "
-                    "Wt-%d Ws-%d avg Wilson loop value",
-                    W.Wt, W.Ws);
-
-            free(W.arr);
-            exit(EXIT_FAILURE);
+                    "Warning: skipping column %d (Wt-%d Ws-%d) due "
+                    "to non-positive average Wilson loop value\n",
+                    target_col, W.Wt, W.Ws);
         }
+        else
+        {
+            Potential.avg = StringU(W.totSum / (double)sampleEff, W.Wt);
 
-        Potential.avg = StringU(W.totSum / (double)sampleEff, W.Wt);
+            // Perform jackknife analysis
 
-        // Perform jackknife analysis
+            jackknife(&Potential, &W, nblocks, blockdim);
 
-        jackknife(&Potential, &W, nblocks, blockdim);
+            // Export results
 
-        // Export results
-
-        fprintf(out, "%lf %d %d %lf %lf \n", beta, W.Ws, W.Wt, Potential.avg, Potential.std);
+            fprintf(out, "%lf %d %d %lf %lf \n", beta, W.Ws, W.Wt, Potential.avg, Potential.std);
+        }
 
         // Update lattice counters
 
