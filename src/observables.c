@@ -1,4 +1,4 @@
-/* 
+/*
    Note: This code structure has been validated against a known-correct
    Ising analysis implementation in a separate repository. Benchmark results
    confirmed identical behavior.
@@ -38,6 +38,69 @@ typedef struct obs
     double kahanCorrection[2]; //  corrections to be used in sumKahan
 
 } obs;
+
+/* Validate input file format and data range.
+
+   Checks that each of the 'sampleEff' lines from 'fp' (starting at 'pos')
+   has at least 'ncolumns' valid floating point values and that each value is ≤ 1.
+
+   If any line has fewer columns, or a value is out of range, or if an unexpected 
+   end of file is reached, an error message is printed and the program terminates.
+*/
+void checkFile(FILE *fp, long pos, long int sampleEff, int ncolumns)
+{
+    char buffer[4000];
+    int fileHasErrors = 0;
+
+    double value;
+    int read;
+
+    for (long int row = 0; row < sampleEff; row++)
+    {
+        // read one line from the file into 'buffer'
+        if (fgets(buffer, sizeof(buffer), fp) == NULL)
+        {
+            fprintf(stderr, "Error: unexpected end of file or read error at row %ld\n", row);
+            fclose(fp);
+            exit(EXIT_FAILURE);
+        }
+
+        char *ptr = buffer;
+
+        // check that each line has at least ncolumns and expected values
+        for (int col = 0; col < ncolumns; col++)
+        {
+            if (sscanf(ptr, "%lf%n", &value, &read) != 1)
+            {
+                fprintf(stderr, "Line %ld has fewer columns "
+                                "than expected (expected %d)\n",
+                        row + 1, ncolumns);
+                fileHasErrors = 1;
+                break; // stop checking this line
+            }
+            if (value > 1)
+            {
+                fprintf(stderr, "invalid value %lf at line %ld column %d\n",
+                        value, row + 1, col + 1);
+                fileHasErrors = 1;
+            }
+            ptr += read;
+        }
+    }
+    if (fileHasErrors)
+    {
+        fprintf(stderr, "\nError: invalid input file. Please fix and retry.\n");
+        fclose(fp);
+        exit(EXIT_FAILURE);
+    }
+    // reset pointer so data analysis can start from the top
+    if (fseek(fp, pos, SEEK_SET) != 0)
+    {
+        fprintf(stderr, "Error: unable to reset file pointer after checkFile\n");
+        fclose(fp);
+        exit(EXIT_FAILURE);
+    }
+}
 
 // Reset all fields in a data structure
 void resetData(data *W)
@@ -86,29 +149,29 @@ void extractData(FILE *fp, data *W, long int sampleEff, long pos,
                  int target_col, int Wt_counter, int Ws_counter)
 {
     // buffer to store one line of text from the file
-    char buffer[4000]; 
+    char buffer[4000];
 
     double value;
     int read;
 
-    for (int row = 0; row < sampleEff; row++)
-    {   
+    for (long int row = 0; row < sampleEff; row++)
+    {
         // read one line from the file into 'buffer'
         if (fgets(buffer, sizeof(buffer), fp) == NULL)
         {
             fprintf(stderr, "Error: unexpected end of file"
-                            "or read error at row %d\n",
+                            "or read error at row %ld\n",
                     row);
             free(W->arr);
             fclose(fp);
             exit(EXIT_FAILURE);
         }
         // pointer to current position in the line
-        char *ptr = buffer; 
+        char *ptr = buffer;
 
         // reach desired column
         for (int col = 0; col <= target_col; col++)
-        {   
+        {
             // read a double and count chars read
             sscanf(ptr, "%lf%n", &value, &read);
 
@@ -264,8 +327,8 @@ int main(int argc, char **argv)
     data W = {0};
 
     long int sample, sampleEff, blockdim, nblocks, therm;
-    int size;
-    double beta;
+    int size, ncolumns;
+    double beta, mean;
 
     char infile[STRING_LENGTH];
     char outfile[STRING_LENGTH];
@@ -283,9 +346,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "blockdim has to be at least 2\n");
         return EXIT_FAILURE;
     }
-    if (size < 1)
+    if (size < 4)
     {
-        fprintf(stderr, "size has to be at least 1\n");
+        fprintf(stderr, "size has to be at least 4\n");
         return EXIT_FAILURE;
     }
     if (therm < 0)
@@ -295,6 +358,7 @@ int main(int argc, char **argv)
     }
     nblocks = (sample - therm) / blockdim;
     sampleEff = nblocks * blockdim;
+    ncolumns = MIN(size / 4, 8) * (size / 4);
 
     // Open  input and output file
 
@@ -316,6 +380,20 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
+    // Discard thermalization
+
+    char buffer[4000];
+    for (long int i = 0; i < therm; i++)
+    {
+        if (fgets(buffer, sizeof(buffer), fp) == NULL)
+            break;
+    }
+
+    // Save pointer position in FILE after thermalization
+    long pos = ftell(fp);
+    // Check file integrity
+    checkFile(fp, pos, sampleEff, ncolumns);
+
     // Allocate dynamic arrays
 
     W.arr = (double *)malloc((unsigned)sampleEff * sizeof(double));
@@ -327,22 +405,9 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    // Discard thermalization
-
-    char buffer[4000];
-    for (long int i = 0; i < therm; i++)
-    {
-        if (fgets(buffer, sizeof(buffer), fp) == NULL) break;
-    }
-
-    // Save pointer position in FILE after thermalization
-
-    long pos = ftell(fp);
-
     // Determine lattice loop parameters
 
     int Wt_max = MIN(size / 4, 8), Wt_counter = 1, Ws_counter = 1;
-    int ncolumns = MIN(size / 4, 8) * (size / 4);
 
     // Loop over each Wilson loop column
 
@@ -354,17 +419,17 @@ int main(int argc, char **argv)
         extractData(fp, &W, sampleEff, pos, target_col, Wt_counter, Ws_counter);
 
         // Compute average potential for this column
-
-        if (W.totSum / (double)sampleEff <= 0)
+        mean = W.totSum / (double)sampleEff;
+        if (mean <= 0)
         {
             fprintf(stderr,
                     "Warning: skipping column %d (Wt-%d Ws-%d) due "
-                    "to non-positive average Wilson loop value\n",
-                    target_col, W.Wt, W.Ws);
+                    "to non-positive average Wilson loop value %.12lf\n",
+                    target_col, W.Wt, W.Ws, mean);
         }
         else
         {
-            Potential.avg = StringU(W.totSum / (double)sampleEff, W.Wt);
+            Potential.avg = StringU(mean, W.Wt);
 
             // Perform jackknife analysis
 
@@ -384,6 +449,8 @@ int main(int argc, char **argv)
             Wt_counter = 1;
         }
     }
+
+    fprintf(stderr, "\nAll valid data saved in %s\n", outfile);
 
     // Close files and free allocated memory
 
